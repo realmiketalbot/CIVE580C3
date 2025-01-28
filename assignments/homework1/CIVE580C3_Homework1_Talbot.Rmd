@@ -1,0 +1,182 @@
+---
+title: "CIVE580C3 - Homework 1"
+author: "Mike Talbot"
+date: '`r Sys.Date()`'
+output: 
+  bookdown::pdf_document2:
+    toc: TRUE
+    number_sections: TRUE
+---
+
+\newpage
+# Setup
+## Configure Python support and Miniconda environment
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(reticulate)
+
+# Config parameters
+envname <- "cive580c3"
+packages <- c("python=3.11", 
+              "pip", 
+              "numpy", 
+              "matplotlib", 
+              "pandas", 
+              "geopandas", 
+              "rasterstats")
+
+# Install Miniconda (first time only)
+#install_miniconda(force = F)
+
+# Create environment (first time only)
+#conda_remove(envname, packages = NULL, conda = "auto") # remove env if necessary
+#conda_create(envname, forge = T, packages = packages) # create new env
+#conda_list(conda = "auto") # check that the new env is listed
+
+# Use the new environment for reticulate
+use_miniconda(envname)
+```
+
+## Load dependencies
+```{python load-dependencies}
+import os
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import matplotlib
+from matplotlib import pyplot as plt
+import rasterstats
+from rasterstats import zonal_stats
+import rasterio
+from rasterio.warp import transform_bounds, calculate_default_transform, reproject, Resampling
+from scipy.stats import linregress
+from contextlib import redirect_stdout
+
+# Define common CRS to use
+output_crs = "OGC:CRS83"
+```
+
+# Part 1
+Part 1 was waved in consideration of my previous experience with Python.
+
+\newpage
+# Part 2
+## Read HUC2 watershed and PRISM rasters, calculate zonal statistics
+```{python zonal-stats}
+# Load the HUC2 watersheds shapefile, extract watershed 16, and reproject
+watersheds = gpd.read_file("../remote-sensing-hydro-2025/data/watersheds/huc2.shp")
+watershed_16 = watersheds[watersheds['REG'] == '16'].to_crs(output_crs)
+
+# List all PRISM raster files
+prism_files = [
+    os.path.join("../remote-sensing-hydro-2025/data/prism", f)
+    for f in os.listdir("../remote-sensing-hydro-2025/data/prism")
+    if f.endswith("bil")
+]
+
+# Function to extract the year from file names
+def extract_year(filename):
+    # Look for a 4-digit number in the file name
+    return int([s for s in filename.split('_') if s.isdigit() and len(s) == 4][0])
+
+# Initialize a dictionary to store results
+results = {}
+
+# Process each PRISM raster file
+for prism_file in prism_files:
+    # Extract year from file name
+    year = extract_year(os.path.basename(prism_file)) 
+    
+    # Open the raster file
+    with rasterio.open(prism_file) as prism_raster:
+        # Reproject raster to match the output CRS
+        transform, width, height = calculate_default_transform(
+            prism_raster.crs, 
+            output_crs, 
+            prism_raster.width, 
+            prism_raster.height, 
+            *prism_raster.bounds
+        )
+
+        # Prepare an empty array for the reprojected raster
+        raster_reproj = np.empty((height, width), dtype=prism_raster.dtypes[0])
+
+        # Reproject the raster, suppressing output
+        with redirect_stdout(open(os.devnull, 'w')):
+            reproject(
+                source=rasterio.band(prism_raster, 1),
+                destination=raster_reproj,
+                src_transform=prism_raster.transform,
+                src_crs=prism_raster.crs,
+                dst_transform=transform,
+                dst_crs=output_crs,
+                resampling=Resampling.nearest,
+            )
+            
+        # Compute zonal stats using the raster array and affine transform
+        stats = zonal_stats(
+            watershed_16, raster_reproj,
+            affine=transform,
+            stats="mean",
+            nodata=prism_raster.nodata,
+        )
+
+        # Store the mean temperature for the first (only) polygon
+        results[year] = stats[0]['mean']
+
+# Convert results to a pandas DataFrame
+mean_temps_df = pd.DataFrame.from_dict(results, orient='index', columns=['mean_temp'])
+mean_temps_df.index.name = 'year'
+```
+
+\newpage
+## Create a map of the watershed
+```{python map}
+# Load US states shapefile from Natural Earth
+ne_file = "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_1_states_provinces.zip"
+us_states = gpd.read_file(ne_file)
+us_states = us_states.to_crs(output_crs)
+
+# Plot the watershed with US state boundaries
+fig, ax = plt.subplots(figsize=(8, 6))
+us_states.plot(ax=ax, color='lightgrey', edgecolor='black', alpha=0.7)
+watershed_16.plot(ax=ax, color='lightblue', edgecolor='darkblue', alpha=0.7)
+
+# Set the map limits to the bounding box of the watershed
+watershed_bounds = watershed_16.total_bounds
+ax.set_xlim(watershed_bounds[0]*1.05, watershed_bounds[2]*0.95);
+ax.set_ylim(watershed_bounds[1]*0.95, watershed_bounds[3]*1.05);
+
+# Customize the map
+axis_limits = plt.axis("on")
+plt.tight_layout()
+
+# Display the map
+plt.show()
+```
+
+\newpage
+## Plot mean annual temperature by year
+```{python plot}
+# Plot mean annual temperature by year
+plt.figure(figsize=(8, 6))
+plt.scatter(mean_temps_df.index, mean_temps_df['mean_temp'], color='blue')
+plt.ylabel('Mean Annual Temperature (°C)', fontsize=12)
+plt.grid(True, linestyle='--', alpha=0.6)
+plt.gca().set_axisbelow(True)
+plt.tight_layout()
+
+# Display the plot
+plt.show()
+```
+
+\newpage
+## Calculate the slope of the regression through mean annual temperature
+```{python linregress}
+# Perform linear regression
+slope, intercept, r_value, p_value, std_err = linregress(mean_temps_df.index, 
+                                                         mean_temps_df['mean_temp'])
+
+# Display regression results
+print(f"  Slope: {slope:.4f} °C/yr")
+```

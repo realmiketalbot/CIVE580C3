@@ -1,0 +1,60 @@
+---
+title: "Lecture Notes"
+author: "Mike Talbot"
+date: "`r Sys.Date()`"
+output: 
+  bookdown::pdf_document2:
+    toc: TRUE
+    number_sections: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(reticulate)
+
+# Config parameters
+envname <- "cive580c3"
+packages <- c("python=3.11", 
+              "pip", 
+              "numpy", 
+              "matplotlib", 
+              "pandas", 
+              "geopandas", 
+              "rasterstats")
+
+# Install Miniconda (first time only)
+#install_miniconda(force = F)
+
+# Create environment (first time only)
+#conda_remove(envname, packages = NULL, conda = "auto") # remove env if necessary
+#conda_create(envname, forge = T, packages = packages) # create new env
+#conda_list(conda = "auto") # check that the new env is listed
+
+# Use the new environment for reticulate
+use_miniconda(envname)
+```
+
+## Load dependencies
+```{python load-dependencies}
+import os
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import matplotlib
+from matplotlib import pyplot as plt
+import rasterstats
+from rasterstats import zonal_stats
+import rasterio
+from rasterio.warp import transform_bounds, calculate_default_transform, reproject, Resampling
+from scipy.stats import linregress
+from contextlib import redirect_stdout
+
+# Define common CRS to use
+output_crs = "OGC:CRS83"
+```
+
+## 2025-01-28
+
+```{python load_data}
+
+```

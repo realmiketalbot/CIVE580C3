@@ -1,0 +1,25 @@
+---
+title: "CIVE580C3 - Homework 0"
+author: "Mike Talbot"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+_Please submit a word document with a brief paragraph introducing yourself. What is your major/degree you are pursuing (i.e. MS in Civil Engineering), what most interests you professionally, how do you anticipate/hope this class will help you with those interests?_
+
+_You may also optionally include something interesting about yourself--a hobby, for example--and a headshot to help me remember you. _
+
+# Background
+I'm a second-year PhD student in Civil & Environmental Engineering working with Frances Davenport. I have a BBAE in Biosystems & Agricultural Engineering and a MS in Bioproducts & Biosystems Engineering, both from the University of Minnesota. I worked for 10 years at a small ("boutique") water resources consulting firm called Emmons & Olivier Resources in St. Paul, MN, where I performed hydrologic & hydraulic modeling and worked on a bunch of watershed planning efforts, civil engineer design projects (predominantly green infrastructure), and - for the last few years I was there - geospatial database management and web development projects. I'm an expert R coder, a proficient Python coder, a decent Javascript coder, and a novice with Julia (I also know PHP quite well but that's pretty irrelevant for this course and for my research). For a couple of years I taught the laboratory section of an upper-level undergraduate engineering course (Transport in Biological Systems) that used VBA as an introductory language. My CV is [here](https://miketalbot.io/cv) in case you're really curious (but you don't need to be).
+
+# Professional Interests
+I'm interested in using machine learning (specifically long short-term memory (LSTM) neural networks) for hydrologic modeling. Since I began my PhD a year ago, I've built up a framework for doing this type of modeling using Python and Tensorflow at first before switching to PyTorch (the CUDA compatibility issues with Tensorflow were driving me crazy). My research focuses heavily on streamflow prediction, and I'm specifically planning to attempt to improve the skill of LSTMs in predicting extreme streamflow peaks. I'm also interested in using explainable AI/interpretability techniques along with causal inference techniques to "open the black box" of deep learning models like LSTMs. 
+
+Frances has a couple of undergraduate students working with her this semester through the SURE program, and we're considering having one of them work with the Surface Water Ocean Topography (SWOT) lake level dataset, so I may turn that work into my project for this class (and hopefully into a publication).
+
+# Hobbies
+I enjoy playing guitar, cross-country skiing (when I can, which isn't often here in Fort Collins), weight lifting, running, commuting to campus on my bike, and playing the odd video game. I do a lot of other things too... I probably have too many hobbies. 
