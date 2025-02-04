@@ -54,7 +54,21 @@ output_crs = "OGC:CRS83"
 ```
 
 ## 2025-01-28
+No notes.
 
-```{python load_data}
+## 2025-01-30
+- Swath width is a function of the instantaneous field of view (IFOV) - the angle through which a sensor is receiving electromagnetic radiation.
 
+```{r q1}
+ifov <- 3.54E-4 #radians
+height <- 700 #km
+# tan(ifov / 2) = (width / 2) / height
+width <- 2 * height * tan(ifov / 2) * 1000 #m
+print(width)
 ```
+
+- Bandwidth and central wavelength affect spatial resolution
+- Full Width Half Bandwidth (FWHB) is often referenced
+- Atmospheric transmission of different wavelengths affects spatial resolution
+- For rainfall, infrared can really only measure the cloud top, while microwave can sense hydrometeors (within the cloud)
+

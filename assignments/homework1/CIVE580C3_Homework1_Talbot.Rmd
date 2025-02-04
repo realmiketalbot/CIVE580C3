@@ -64,13 +64,13 @@ Part 1 was waved in consideration of my previous experience with Python.
 ## Read HUC2 watershed and PRISM rasters, calculate zonal statistics
 ```{python zonal-stats}
 # Load the HUC2 watersheds shapefile, extract watershed 16, and reproject
-watersheds = gpd.read_file("../remote-sensing-hydro-2025/data/watersheds/huc2.shp")
+watersheds = gpd.read_file("../../data/watersheds/huc2.shp")
 watershed_16 = watersheds[watersheds['REG'] == '16'].to_crs(output_crs)
 
 # List all PRISM raster files
 prism_files = [
-    os.path.join("../remote-sensing-hydro-2025/data/prism", f)
-    for f in os.listdir("../remote-sensing-hydro-2025/data/prism")
+    os.path.join("../../data/prism", f)
+    for f in os.listdir("../../data/prism")
     if f.endswith("bil")
 ]
 
