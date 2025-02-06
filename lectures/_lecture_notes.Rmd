@@ -72,3 +72,9 @@ print(width)
 - Atmospheric transmission of different wavelengths affects spatial resolution
 - For rainfall, infrared can really only measure the cloud top, while microwave can sense hydrometeors (within the cloud)
 
+## 2025-02-04
+- GPM has both passive and active microwave
+- Measures different types of precipitation at difference frequencies
+- DRP sends out two different frequencies: 35 GHz and 13.6 GHz
+  - Perpendicular to flight: range
+  - Parallel to flight: azimuth
