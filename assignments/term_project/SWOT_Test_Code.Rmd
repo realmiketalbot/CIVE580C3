@@ -1,0 +1,354 @@
+---
+title: "SWOT Test Code"
+author: "Mike Talbot"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+This is the tutorial found here: https://podaac.github.io/tutorials/notebooks/datasets/SWOT_L4_DAWG_SOS_DISCHARGE.html
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(reticulate)
+
+# Config parameters
+envname <- "cive580c3_termproject"
+packages <- c("python=3.11", 
+              "pip", 
+              "numpy",
+              "pandas",
+              "cartopy",
+              "earthaccess",
+              "netCDF4")
+
+# Install Miniconda (first time only)
+#install_miniconda(force = T)
+
+# Create environment (first time only)
+#conda_remove(envname, packages = NULL, conda = "auto") # remove env if necessary
+#conda_create(envname, forge = T, packages = packages) # create new env
+#conda_list(conda = "auto") # check that the new env is listed
+
+# Use the new environment for reticulate
+use_miniconda(envname)
+```
+
+```{python load-dependencies}
+import datetime
+import pathlib
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import earthaccess
+import matplotlib.pyplot as plt
+import netCDF4 as nc
+import numpy as np
+import pandas as pd
+
+earthaccess.login() # Login with your EDL credentials if asked
+```
+
+# Search and Access SoS data
+Locate the SoS data of interest and then download for access.
+```{python locate-granules}
+# Search and locate granules
+granule_info = earthaccess.search_data(
+    short_name="SWOT_L4_DAWG_SOS_DISCHARGE",
+    temporal=("2023-04-07", "2023-04-26"),
+)
+#granule_info
+```
+
+```{python download-data}
+# Enter a directory path to store downloaded data in
+downloads_dir = pathlib.Path("data_downloads")
+downloads_dir.mkdir(parents=True, exist_ok=True)
+
+# Select a priors and results pair to explore
+download_links = [[link for link in earthaccess.results.DataGranule.data_links(granule)] for granule in granule_info]
+print("Select a priors and results file to explore:")
+for downloads in download_links: 
+    for download in downloads:
+        if "priors" in download: print(download)
+```
+
+```{python open-file}
+# Select Europe ("eu") priors file to work with
+priors_link = "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/SWOT_L4_DAWG_SOS_DISCHARGE/eu_sword_v15_SOS_unconstrained_0001_20240228T205029_priors.nc"
+
+# Select results
+results_link = priors_link.replace("priors", "results")
+
+earthaccess.download(priors_link, downloads_dir)
+earthaccess.download(results_link, downloads_dir)
+
+# Open downloaded files to access SoS granule data
+priors_download = priors_link.split('/')[-1]
+results_download = results_link.split('/')[-1]
+
+priors = nc.Dataset(downloads_dir.joinpath(priors_download), format="NETCDF4")
+results = nc.Dataset(downloads_dir.joinpath(results_download), format="NETCDF4")
+```
+
+
+# Explore the SoS
+We can now explore the SoS using either the data read directly from S3 or downloaded to your local computer.
+```{python explore-data}
+# Constants
+
+# Select a river
+RIVER_NAME = "Rhine"
+
+# Select a discharge algorithm (hivdi, neobam, metroman, momma, sad, sic4dvar)
+DISCHARGE_ALGORITHM = "hivdi"
+DISCHARGE_VARIABLE = "Q"
+
+# Display the priors groups
+#print("Priors Groups:")
+#print(priors.groups)
+
+# Display the module groups
+#print("Results Groups:")
+#print(results.groups)
+```
+
+# Plot river reach locations
+Information about the spatial location of river reaches is in the reaches and nodes groups including river names. This data is taken directly from [SWOT River Database (SWORD)](https://www.swordexplorer.com/).
+```{python plot-river-reach-locations}
+reaches = results.groups['reaches']    # Access the reaches group
+
+print("Reaches Group")
+print(reaches, "\n")
+
+print("Longitude")
+print(reaches.variables['x'])
+
+# Unpack the spatial coordinates and river names
+reach_lon = results.groups['reaches'].variables['x']
+reach_lat = results.groups['reaches'].variables['y']
+
+river_names = results.groups['reaches'].variables['river_name']
+
+# Filter data to only find the river of interest
+idx = np.where(river_names[:] == RIVER_NAME)
+print(f"Indexes for {RIVER_NAME}:\n {idx}")
+
+# Plot the location of the river
+fig = plt.figure(figsize=(10,10))
+
+# Add map elements gridlines
+ax = plt.axes(projection=ccrs.PlateCarree())
+ax.coastlines()
+ax.add_feature(cfeature.STATES, edgecolor='black')
+
+gl = ax.gridlines(crs=ccrs.PlateCarree(), linewidth=1, color='black', alpha=0.5, linestyle='--', draw_labels=True)
+gl.xlabels_top = False
+gl.ylabels_left = True
+gl.ylabels_right=False
+gl.xlines = True
+
+gl.xformatter = LONGITUDE_FORMATTER
+gl.yformatter = LATITUDE_FORMATTER
+
+# Plot the river reach centerpoint locations
+ax.scatter(reach_lon[idx], y=reach_lat[idx], color='c')
+
+# Add the title
+plt.title(f'{RIVER_NAME} Reach Centerpoint Locations')
+
+plt.show()
+```
+
+# Navigating Reaches and Nodes
+The SoS is organized by continent following the conventions set in the SWOT River Database for the NetCDF file format. Reach identifiers can be found in the “reaches” group and node identifiers can be found in the “nodes” group. The following sections show you how to locate reaches and nodes by river name which allows you to index into the reach and/or node level data.
+
+## How to locate reach and node identifiers by river name
+You can search for a river name using the same convention as used when plotting river reach locations to obtain the reach identifiers for that river. You can then use the reach identifiers to locate the nodes that belong to each reach for that river as the nodes are indexed on a different dimension (num_nodes) than reaches (num_reaches).
+
+```{python navigate-reaches-and-nodes}
+# Locate the indexes for the specific river you are interested in
+river_names = results['reaches']['river_name'][:]
+reach_idx = np.where(river_names[:] == RIVER_NAME)
+
+# Locate the reach identifiers for the river name
+reach_identifiers = results['reaches']['reach_id'][reach_idx]
+
+# Locate the reach identifiers of interest on the node-level
+reach_node_identifiers = results['nodes']['reach_id'][:]
+node_idx = []
+for reach_identifier in reach_identifiers:
+    node_idx.extend(np.where(reach_node_identifiers == reach_identifier)[0])
+
+# Locate the node identifiers of interest using the reach identifiers to index
+node_identifiers = results['nodes']['node_id'][:]
+print(f"Node identifiers: {node_identifiers}")
+
+# Unpack the spatial coordinates on the node level and index to values of interest
+node_lon = results['nodes']['x'][node_idx]
+node_lat = results['nodes']['y'][node_idx]
+print(f"Longitude #: {node_lon.shape}")
+print(f"Latitude #: {node_lat.shape}")
+
+# Plot the nodes
+fig = plt.figure(figsize=(10,10))
+
+# Add map elements gridlines
+ax = plt.axes(projection=ccrs.PlateCarree())
+ax.coastlines()
+ax.add_feature(cfeature.STATES, edgecolor='black')
+
+gl = ax.gridlines(crs=ccrs.PlateCarree(), linewidth=1, color='black', alpha=0.5, linestyle='--', draw_labels=True)
+gl.xlabels_top = False
+gl.ylabels_left = True
+gl.ylabels_right=False
+gl.xlines = True
+
+gl.xformatter = LONGITUDE_FORMATTER
+gl.yformatter = LATITUDE_FORMATTER
+
+# Plot the river reach centerpoint locations
+ax.scatter(x=node_lon, y=node_lat)
+
+# Add the title
+plt.title(f'{RIVER_NAME} Node Centerpoint Locations')
+plt.show()
+```
+
+# Plot Discharge Timeseries
+The main data of interest in the results files is the timeseries of river discharge (q) estimates produced by each module. The SoS is a global dataset organized by continents and not every reach will have an associated discharge for each module. So it is helpful to filter out missing values in order to isolate and visualize discharge for the various modules.
+
+## How to locate data amongst missing values
+You can use the `missing_value` NetCDF variable attribute to locate the value used to indicate missing data. You can then filter on that value to isolate the time steps with discharge estimates. The following example uses the HiVDI algorithm results to demonstrate filtering missing values and plotting discharge.
+```{python plot-discharge-data}
+# Retrieve discharge from discharge algorithm group
+discharge_algo_q = results[DISCHARGE_ALGORITHM][DISCHARGE_VARIABLE][:]
+
+# Save the missing value
+missing = results[DISCHARGE_ALGORITHM][DISCHARGE_VARIABLE].missing_value
+
+# Loop through each reach and filter out places where the missing value is present
+data_indexes = []
+for i in range(discharge_algo_q.shape[0]):
+    if discharge_algo_q[i].shape[0] > 1:
+        if np.any(discharge_algo_q[i] != missing): data_indexes.append(i) # For multiple time steps with non-missing values
+    if discharge_algo_q[i].shape[0] == 1 and discharge_algo_q[i] != missing: data_indexes.append(i)  # For one time step with non-missing value
+
+# Display the numeric indexes where discharge data is present
+print(f"10 indexes for locations that have values:\n {data_indexes[:10]}")
+
+reach_identifiers = results['reaches']['reach_id'][data_indexes]
+print(f"10 reach identifiers for locations that have values:\n {reach_identifiers[:10]}")
+
+# Review what river names are present in the data
+print("10 River Names")
+print(river_names[data_indexes[:10]])
+
+river_names = np.atleast_1d(river_names)
+river_indexes = np.where(river_names  == RIVER_NAME)
+print(f"\nIndexes for the {RIVER_NAME}")
+print(river_indexes)
+
+# Locate overlap
+overlap_indexes = np.intersect1d(data_indexes, river_indexes)
+print(f"\nOverlapping indexes for the {RIVER_NAME} with {DISCHARGE_ALGORITHM.upper()} Discharge data")
+print(overlap_indexes)
+
+# Review what river names are present in the data
+print("10 River Names")
+print(river_names[data_indexes[:10]])
+
+river_indexes = np.where(river_names  == RIVER_NAME)
+print(f"\nIndexes for the {RIVER_NAME}")
+print(river_indexes)
+
+# Locate overlap
+overlap_indexes = np.intersect1d(data_indexes, river_indexes)
+print(f"\nOverlapping indexes for the {RIVER_NAME} with {DISCHARGE_ALGORITHM.upper()} Discharge data")
+print(overlap_indexes)
+
+# Select the first reach from the overlapping indexes
+data_index = overlap_indexes[0]
+
+# Locate the reach identifier
+reach_id = reaches['reach_id'][data_index]
+print(f"{RIVER_NAME} reach identifier to plot: {reach_id}")
+
+# Retrieve discharge
+discharge_algo_q = discharge_algo_q[data_index]
+print(f"\nDischarge for {RIVER_NAME} reach identifier # {reach_id}")
+print(discharge_algo_q)
+
+# Retrieve time
+time = results['reaches']['time'][data_index]
+print(f"\nTime for {RIVER_NAME} reach identifier # {reach_id}")
+print(results['reaches']['time'][data_index])
+
+# Transform time to correct format
+swot_ts = datetime.datetime(2000,1,1,0,0,0)
+missing_time = results['reaches']['time'].missing_value
+time_str = []
+for t in time:
+    if t == missing_time: 
+        time_str.append('NO_DATA')
+    else:
+        time_str.append((swot_ts + datetime.timedelta(seconds=t)).strftime('%Y-%m-%dT%H:%M:%S'))
+time_str = np.array(time_str)
+print(f"Formatted time: {time_str}")
+
+# Filter any missing values out of reach identifier discharge and time
+missing_reach_index = np.where(discharge_algo_q != missing)
+
+discharge_algo_q = discharge_algo_q[missing_reach_index]
+print(f"Discharge for {RIVER_NAME} reach identfier # {reach_id}")
+print(discharge_algo_q)
+
+time_str = time_str[missing_reach_index]
+print(f"\nTime for {RIVER_NAME} reach identfier # {reach_id}")
+print(time_str)
+
+# Plot Discharge for the River Reach Identifier
+
+# Set up plot
+fig = plt.figure(figsize=(12,6))
+ax1 = plt.subplot(111)
+
+# Plot data
+ax1.scatter(time_str, discharge_algo_q)
+ax1.plot(time_str, discharge_algo_q)
+
+# Define labels and title
+ax1.set_ylabel('Discharge')
+ax1.set_xlabel('Time')
+
+plt.suptitle(f"Discharge Timeseries from HIVDI for the {RIVER_NAME} River reach identifier: {reach_id}.")
+plt.show()
+```
+
+# Plotting integrator results for comparison
+The SoS contains reach-level Flow Law Parameter (FLPE) algorithms: HiVDI, neoBAM, MetroMan, MOMMA, SAD, SIC4DVar that produce discharge estimates using SWOT observations, SoS Priors and SWORD data. It can be helpful to compare the reach-level FLPEs to the discharge values produced by the Mean Optimization Integrator (MOI). The MOI takes SWOT observation data and reach-level FLPE output and integrates the results. It uses river topology to force mass conservation and also defined uncertainty.
+
+```{python plot-integrator-results}
+# Locate MOI discharge results for discharge algorithm making sure to filter out missing values
+moi_q = results["moi"][DISCHARGE_ALGORITHM]["q"][data_index]
+moi_q = moi_q[missing_reach_index]
+
+print(f"{DISCHARGE_ALGORITHM.upper()} MOI Discharge for {RIVER_NAME} reach identfier # {reach_id}")
+print(moi_q)
+
+# Plot discharge algorithm alongside MOI discharge
+
+# Discharge algorithm Q
+plt.figure(figsize=(12, 6))  # Wider and taller figure
+plt.scatter(time_str, discharge_algo_q)
+plt.plot(time_str, discharge_algo_q, label=f"{DISCHARGE_ALGORITHM.upper()}")
+
+# MOI Q
+plt.scatter(time_str, moi_q)
+plt.plot(time_str, moi_q, label="MOI")
+
+plt.suptitle(f"Discharge Timeseries from HIVDI for the {RIVER_NAME} reach identifier: {reach_id}.")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```

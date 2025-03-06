@@ -1,0 +1,312 @@
+---
+title: "CIVE580C3 - Term Project Scope"
+author: "Mike Talbot"
+date: "`r Sys.Date()`"
+bibliography: references.bib
+csl: style.csl
+output: 
+  bookdown::pdf_document2:
+    toc: TRUE
+    number_sections: FALSE
+    includes:
+      in_header: preamble.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(reticulate)
+library(rbbt)
+
+# Config parameters
+envname <- "cive580c3_termproject"
+packages <- c("python=3.11", 
+              "pip", 
+              "numpy",
+              "pandas",
+              "cartopy",
+              "earthaccess",
+              "netCDF4")
+
+# Install Miniconda (first time only)
+#install_miniconda(force = T)
+
+# Create environment (first time only)
+#conda_remove(envname, packages = NULL, conda = "auto") # remove env if necessary
+#conda_create(envname, forge = T, packages = packages) # create new env
+#conda_list(conda = "auto") # check that the new env is listed
+
+# Use the new environment for reticulate
+use_miniconda(envname)
+```
+
+# Overview
+
+The Surface Water and Ocean Topography (SWOT) mission [@biancamaria2016] was launched by NASA in December of 2022. This means there is now a full two years worth of data (2023 and 2024) that can be viewed and analyzed. My proposed term project will acquire and process SWOT River Discharge Estimates for the Colorado River basin and compare them against USGS stream gauge data. 
+
+## Proposed Project Scope
+A basic analysis of the SWOT River Discharge Estimates will first include evaluating how well SWOT discharge estimates match USGS stream gauge data across different reaches using statistical measures (e.g., bias, RMSE). Next, I'll assess how temporal and spatial discrepancies vary with factors such as river width and season. I'd also like to compare the uncertainty in SWOT estimates to those from USGS gauges (if/where this information is available). Lastly, because it potentially relates directly to my research, I plan to examine how the temporal sparsity of SWOT data influences its ability to capture hydrologic extremes. 
+
+Since discharge estimates are not yet available via Hydrocron [@nickles2023], this effort alone may prove challenging and time consuming. However, time permitting, I would also like to incorporate some more hydrologic science into my analysis. This could include analyses such as:
+
+-   Investigating what other river morphological characteristics might be influencing the accuracy of SWOT river discharge estimates
+
+-   Assessing where and how the increased spatial resolution of the SWOT data might fill in gaps in our understanding of the dynamics of the Colorado River and its tributaries
+
+\newpage
+## Schedule of Tasks
+As alluded to above, since the SWOT River Discharge Estimates have not yet been widely used, it is difficult to say how easy it will be to accomplish what I've outlined here. Any difficulty in acquiring and/or processing these data might shift my schedule, and I may not get to the optional tasks. 
+
+| Week | Task |
+|------------------------------------|------------------------------------|
+| **Week 1 (Mar 3 - Mar 9)** | Define project scope, refine research questions, set up computational environment, download sample data through the Sword of Science API (for proof of concept). |
+| **Week 2 (Mar 10 - Mar 16)** | Project on pause (I'll be out of the country). |
+| **Week 3 (Mar 17 - Mar 23)** | Acquire SWOT River Discharge Estimates and USGS stream gauge data for the Colorado River basin. Preprocess and clean SWOT and USGS discharge data, ensuring time and spatial alignment. |
+| **Week 4 (Mar 24 - Mar 30)** | Perform initial comparison of SWOT vs. USGS discharge using statistical measures (bias, RMSE). |
+| **Week 5 (Mar 31 - Apr 6)** | Analyze spatial and temporal discrepancies based on river width, season, and other factors. |
+| **Week 6 (Apr 7 - Apr 13)** | Investigate how SWOT’s temporal sparsity affects the capture of hydrologic extremes. |
+| **Week 7 (Apr 14 - Apr 20)** | Optional: Incorporate additional hydrologic science analyses (e.g., morphology influences, spatial resolution benefits). |
+| **Week 8 (Apr 21 - Apr 27)** | Finalize results, create visualizations, and draft initial report. |
+| **Week 9 (Apr 28 - May 4)** | Revise and refine report, prepare final presentation (if required). |
+| **Week 10 (May 5 - May 11)** | Submit final term project and present findings. |
+
+\newpage
+
+# Proof of Concept
+
+Through the Sword of Science API, I have been able to download and plot SWOT river discharge estimates, so this looks promising.
+
+```{python edl-setup, include=FALSE}
+import datetime
+import pathlib
+import numpy as np
+import pandas as pd
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import earthaccess
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import netCDF4 as nc
+
+# Log in using EDL credentials
+earthaccess.login()
+```
+
+```{python map-colorado-river-reaches, include=FALSE}
+# Search and locate granules
+granule_info = earthaccess.search_data(
+    short_name="SWOT_L4_DAWG_SOS_DISCHARGE",
+    temporal=("2023-01-01", "2024-12-31")
+)
+
+# Enter a directory path to store downloaded data in
+downloads_dir = pathlib.Path("data_downloads")
+downloads_dir.mkdir(parents=True, exist_ok=True)
+
+# Select a priors and results pair to explore
+download_links = [[link for link in earthaccess.results.DataGranule.data_links(granule)] for granule in granule_info]
+print("Select a priors and results file to explore:")
+for downloads in download_links: 
+    for download in downloads:
+        if "priors" in download: print(download)
+        
+# Select Europe ("eu") priors file to work with
+priors_link = "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/SWOT_L4_DAWG_SOS_DISCHARGE/na_sword_v16_SOS_unconstrained_0001_20240611T010141_priors.nc"
+
+#priors_link = "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/SWOT_L4_DAWG_SOS_DISCHARGE/na_sword_v16_SOS_unconstrained_0001_20240726T123358_priors.nc"
+
+#priors_link = "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/SWOT_L4_DAWG_SOS_DISCHARGE/na_sword_v15_SOS_unconstrained_0001_20240228T205032_priors.nc"
+
+# Select results
+results_link = priors_link.replace("priors", "results")
+
+earthaccess.download(priors_link, downloads_dir)
+earthaccess.download(results_link, downloads_dir)
+
+# Open downloaded files to access SoS granule data
+priors_download = priors_link.split('/')[-1]
+results_download = results_link.split('/')[-1]
+
+priors = nc.Dataset(downloads_dir.joinpath(priors_download), format="NETCDF4")
+results = nc.Dataset(downloads_dir.joinpath(results_download), format="NETCDF4")
+
+river_names = results.groups['reaches'].variables['river_name'][:]
+unique_rivers = np.unique(river_names)
+print(list(unique_rivers))
+
+# Select a river
+RIVER_NAME = "Colorado River"
+
+# Select a discharge algorithm (hivdi, neobam, metroman, momma, sad, sic4dvar)
+DISCHARGE_ALGORITHM = "hivdi"
+DISCHARGE_VARIABLE = "Q"
+
+reaches = results.groups['reaches']    # Access the reaches group
+
+print("Reaches Group")
+print(reaches, "\n")
+
+print("Longitude")
+print(reaches.variables['x'])
+
+# Extract reach locations
+reach_lon = results.groups['reaches'].variables['x'][:]
+reach_lat = results.groups['reaches'].variables['y'][:]
+river_names = results.groups['reaches'].variables['river_name'][:]
+
+# Define rough bounding box for the Colorado River in the western U.S.
+min_lon, max_lon = -120, -100  # Approximate longitudes
+min_lat, max_lat = 25, 45  # Approximate latitudes
+
+# Find indexes where the river is RIVER_NAME and within the bounding box
+idx = np.where(
+    (river_names[:] == RIVER_NAME) &
+    (reach_lon >= min_lon) & (reach_lon <= max_lon) &
+    (reach_lat >= min_lat) & (reach_lat <= max_lat)
+)
+
+#idx = np.where(river_names[:] == RIVER_NAME)
+
+print(f"Indexes for {RIVER_NAME}:\n {idx}")
+```
+
+```{python show-map}
+# Plot the location of the river
+fig = plt.figure(figsize=(4,4))
+
+# Add map elements gridlines
+ax = plt.axes(projection=ccrs.PlateCarree())
+ax.coastlines()
+ax.add_feature(cfeature.STATES, edgecolor='black')
+
+gl = ax.gridlines(crs=ccrs.PlateCarree(), linewidth=1, color='black', alpha=0.5, linestyle='--', draw_labels=True)
+gl.xlabels_top = False
+gl.ylabels_left = True
+gl.ylabels_right=False
+gl.xlines = True
+
+gl.xformatter = LONGITUDE_FORMATTER
+gl.yformatter = LATITUDE_FORMATTER
+
+# Plot the river reach centerpoint locations
+ax.scatter(reach_lon[idx], y=reach_lat[idx], color='c')
+
+# Add the title
+plt.title(f'{RIVER_NAME} Reach Centerpoint Locations')
+
+plt.show()
+```
+
+\newpage
+
+```{python plot-river-discharge, include=FALSE}
+# Retrieve discharge from discharge algorithm group
+discharge_algo_q = results[DISCHARGE_ALGORITHM][DISCHARGE_VARIABLE][:]
+
+# Save the missing value
+missing = results[DISCHARGE_ALGORITHM][DISCHARGE_VARIABLE].missing_value
+
+# Loop through each reach and filter out places where the missing value is present
+data_indexes = []
+for i in range(discharge_algo_q.shape[0]):
+    if discharge_algo_q[i].shape[0] > 1:
+        if np.any(discharge_algo_q[i] != missing): data_indexes.append(i) # For multiple time steps with non-missing values
+    if discharge_algo_q[i].shape[0] == 1 and discharge_algo_q[i] != missing: data_indexes.append(i)  # For one time step with non-missing value
+
+# Display the numeric indexes where discharge data is present
+#print(f"10 indexes for locations that have values:\n {data_indexes[:10]}")
+
+reach_identifiers = results['reaches']['reach_id'][data_indexes]
+#print(f"10 reach identifiers for locations that have values:\n {reach_identifiers[:10]}")
+
+# Review what river names are present in the data
+#print("10 River Names")
+#print(river_names[data_indexes[:10]])
+
+river_names = np.atleast_1d(river_names)
+river_indexes = np.where(river_names  == RIVER_NAME)
+#print(f"\nIndexes for the {RIVER_NAME}")
+#print(river_indexes)
+
+# Locate overlap
+overlap_indexes = np.intersect1d(data_indexes, river_indexes)
+#print(f"\nOverlapping indexes for the {RIVER_NAME} with {DISCHARGE_ALGORITHM.upper()} Discharge data")
+#print(overlap_indexes)
+
+# Review what river names are present in the data
+#print("10 River Names")
+#print(river_names[data_indexes[:10]])
+
+# Select the first reach from the overlapping indexes
+data_index = overlap_indexes[10]
+
+# Locate the reach identifier
+reach_id = reaches['reach_id'][data_index]
+#print(f"{RIVER_NAME} reach identifier to plot: {reach_id}")
+
+# Retrieve discharge
+discharge_algo_q = discharge_algo_q[data_index]
+#print(f"\nDischarge for {RIVER_NAME} reach identifier # {reach_id}")
+#print(discharge_algo_q)
+
+# Retrieve time
+time = results['reaches']['time'][data_index]
+#print(f"\nTime for {RIVER_NAME} reach identifier # {reach_id}")
+#print(results['reaches']['time'][data_index])
+
+# Transform time to correct format
+swot_ts = datetime.datetime(2000,1,1,0,0,0)
+missing_time = results['reaches']['time'].missing_value
+time_str = []
+for t in time:
+    if t == missing_time: 
+        time_str.append('NO_DATA')
+    else:
+        time_str.append((swot_ts + datetime.timedelta(seconds=t)).strftime('%Y-%m-%dT%H:%M:%S'))
+time_str = np.array(time_str)
+#print(f"Formatted time: {time_str}")
+
+# Filter any missing values out of reach identifier discharge and time
+missing_reach_index = np.where(discharge_algo_q != missing)
+
+discharge_algo_q = discharge_algo_q[missing_reach_index]
+#print(f"Discharge for {RIVER_NAME} reach identfier # {reach_id}")
+#print(discharge_algo_q)
+
+time_str = time_str[missing_reach_index]
+#print(f"\nTime for {RIVER_NAME} reach identfier # {reach_id}")
+#print(time_str)
+```
+
+```{python show-plot}
+# Plot Discharge for the River Reach Identifier
+
+# Convert time strings to datetime objects
+time_dt = [datetime.datetime.strptime(t, '%Y-%m-%dT%H:%M:%S') for t in time_str]
+
+# Set up plot
+fig, ax1 = plt.subplots(figsize=(6.5,4))
+
+# Plot data using datetime objects
+ax1.scatter(time_dt, discharge_algo_q)
+ax1.plot(time_dt, discharge_algo_q)
+
+# Format date ticks correctly
+ax1.xaxis.set_major_locator(mdates.AutoDateLocator()) 
+ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))  # Format as YYYY-MM-DD
+
+plt.xticks(rotation=45, ha='right')  # Rotate and align labels correctly
+plt.subplots_adjust(bottom=0.25)  # Prevent label cutoff
+
+plt.xlabel('Time')
+plt.ylabel('Discharge')
+plt.suptitle(f"Discharge Timeseries from {DISCHARGE_ALGORITHM.upper()} for {RIVER_NAME} (Reach ID: {reach_id})")
+
+plt.show()
+```
+
+\newpage
+
+# References

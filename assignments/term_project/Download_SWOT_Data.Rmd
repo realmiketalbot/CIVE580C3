@@ -1,0 +1,127 @@
+---
+title: "CIVE580C3 - Download SWOT Data"
+author: "Mike Talbot"
+date: "`r Sys.Date()`"
+bibliography: references.bib
+csl: style.csl
+output: 
+  bookdown::pdf_document2:
+    toc: TRUE
+    number_sections: FALSE
+    includes:
+      in_header: preamble.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(reticulate)
+library(rbbt)
+
+# Config parameters
+envname <- "cive580c3_termproject"
+packages <- c("python=3.11", 
+              "pip", 
+              "numpy",
+              "pandas",
+              "cartopy",
+              "earthaccess",
+              "netCDF4")
+
+# Install Miniconda (first time only)
+#install_miniconda(force = T)
+
+# Create environment (first time only)
+#conda_remove(envname, packages = NULL, conda = "auto") # remove env if necessary
+#conda_create(envname, forge = T, packages = packages) # create new env
+#conda_list(conda = "auto") # check that the new env is listed
+
+# Use the new environment for reticulate
+use_miniconda(envname)
+```
+
+```{python edl-setup, include=FALSE}
+import datetime
+import pathlib
+import numpy as np
+import pandas as pd
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import earthaccess
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import netCDF4 as nc
+
+# Log in using EDL credentials
+earthaccess.login()
+```
+
+```{python download-granules}
+# Search and locate granules
+granule_info = earthaccess.search_data(
+    short_name="SWOT_L4_DAWG_SOS_DISCHARGE",
+    temporal=("2023-01-01", "2024-12-31")
+)
+
+# Enter a directory path to store downloaded data in
+downloads_dir = pathlib.Path("data_downloads")
+downloads_dir.mkdir(parents=True, exist_ok=True)
+
+# Extract URLs that contain 'na_sword' and end with '_results.nc'
+filtered_urls = [
+    url for granule in granule_info for url in granule.data_links()  # <-- Call the method
+    if "na_sword" in url and (url.endswith("_results.nc") or url.endswith("_priors.nc"))
+]
+
+# Download each filtered file
+if filtered_urls:
+    print(f"Found {len(filtered_urls)} files to download.")
+
+    for url in filtered_urls:
+        earthaccess.download(url, local_path=downloads_dir)
+        print(f"Downloaded: {url.split('/')[-1]}")
+
+else:
+    print("No matching files found.")
+
+```
+
+```{python extract-river-data}
+# Detect all files in downloads_dir
+# ...
+
+# Loop through each downloaded file and extract data
+for file_name in file_names:
+    if file_name.ends_with("_priors.nc"):
+        data = nc.Dataset(downloads_dir.joinpath(file_name), format="NETCDF4")
+    elif file_name.ends_with("_results.nc"):
+        data = nc.Dataset(downloads_dir.joinpath(file_name), format="NETCDF4")
+    
+    # Loop through each NetCDF file and extract data for the river specified
+    RIVER_NAME = "Colorado River"
+    
+    # Select a discharge algorithm (hivdi, neobam, metroman, momma, sad, sic4dvar)
+    DISCHARGE_ALGORITHM = "hivdi"
+    DISCHARGE_VARIABLE = "Q"
+    
+    # Access the reaches group
+    reaches = results.groups['reaches']    
+
+    # Optional: filter by location (helps when multiple rivers have the same name)
+    reach_lat = results.groups['reaches'].variables['y'][:]
+    river_names = results.groups['reaches'].variables['river_name'][:]
+    
+    # Define rough bounding box for the Colorado River in the western U.S.
+    min_lon, max_lon = -120, -100  # Approximate longitudes
+    min_lat, max_lat = 25, 45  # Approximate latitudes
+    
+    # Find indexes where the river is RIVER_NAME and within the bounding box
+    idx = np.where(
+        (river_names[:] == RIVER_NAME) &
+        (reach_lon >= min_lon) & (reach_lon <= max_lon) &
+        (reach_lat >= min_lat) & (reach_lat <= max_lat)
+    )
+
+```

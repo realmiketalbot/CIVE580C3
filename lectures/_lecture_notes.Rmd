@@ -83,4 +83,8 @@ print(width)
 Guest lecture by Gabriel Senay
 - ET is a response variable, whereas precipitation is a driver
 - FANO equation is intended to estimate the theoretical wet bulb temperature for a landsat image
+
+## 2025-03-04
+Guest lecture (~30 min) by Leo ...
+- SWOT river discharge estimates are being delayed due to some uncertainties in the modeling
 - 
