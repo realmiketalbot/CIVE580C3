@@ -4,7 +4,7 @@
 .Ruserdata
 *.tif
 *.xml
-*.png
 *.html
 *.fgb
 *.qmd
+*.nc
